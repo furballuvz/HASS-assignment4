@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+<meta charset="UTF-8">
+<head>
+    <title>HASS02.526 Assignment 4</title>
+	<style>
+	@import url(https://fonts.googleapis.com/css?family=Roboto:400,500,700,300,100);
+        
+    body {
+        font-family: "Roboto", helvetica, arial, sans-serif;
+        display: block;
+        margin: auto;
+        width: 100%;
+        text-align: center;
+    }
+    h3 {
+       font-size: 30px;
+       font-weight: 400;
+       font-style:normal;
+       text-transform:uppercase;
+    }
+    p {
+       color: #404040;
+       font-size: 16px;
+       font-style:normal;
+    }
+		
+    #buttons{
+        margin:20px;
+    }
+    
+    a.btn {
+    	display: inline-block;
+    	text-transform: uppercase;
+    	letter-spacing: 2px;
+    	font-size: 12px;
+    	padding: 10px 30px;
+    	-webkit-border-radius: 5px;
+    	border: 1px solid rgba(0,0,0,0.3);
+    	cursor: pointer;
+    }
+
+	a.btn:hover {
+		background-color: #e3e3e3;
+		border-color: rgba(0,0,0,0.5);
+	}
+	
+	a.btn:active {
+		background-color: #CCC;
+		border-color: rgba(0,0,0,0.9);
+	}
+	
+	
+	/* blue button */
+    a.btn.btn-blue {
+    	background-color: #699DB6;
+    	border-color: rgba(0,0,0,0.3);
+    	color: #FFF;
+    }
+
+	a.btn.btn-blue:hover {
+		background-color: #4F87A2;
+		border-color: rgba(0,0,0,0.5);
+	}
+	
+	a.btn.btn-blue:active {
+		background-color: #3C677B;
+		border-color: rgba(0,0,0,0.9);
+	}
+
+    /* red button */
+    
+    a.btn.btn-red {
+    	background-color: #E48681;
+    	border-color: rgba(0,0,0,0.3);
+    	color: #FFF;
+    }
+    
+   	a.btn.btn-red:hover {
+   		background-color: #DA4F49;
+   		border-color: rgba(0,0,0,0.5);
+   	}
+   	
+   	a.btn.btn-red:active {
+   		background-color: #B32C24;
+   	}
+   	
+   	
+	#map {
+    width: 100vw;
+    height:85vh;
+	}
+	
+	.tooltip {
+        background: #fff;
+        color: #333;
+        font-size: 12px;
+        position: absolute;
+        text-align: center;
+        height: 58px;
+		width: 170px;
+        z-index: 1000;
+		border: 1px solid black;
+		border-radius: 10px;
+    }
+    .legend {
+        display: block;
+        background: #fff;
+        top: 80%;
+		left:70%;
+        position: absolute;
+        height: 50px;
+		width: 280px;
+        z-index: 1000;
+        border: 1px solid black;
+		border-radius: 10px;
+    }
+		
+	.highlight {
+		stroke: #404040;
+		stroke-width: 5px;
+		opacity: 0.8;
+	}
+	.hidden { 
+      display: none; 
+    }
+    #districts {
+        stroke: #404040;
+        stroke-width: 1px;
+        cursor: pointer;
+    }
+
+	</style>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+<h3>Population in Singapore Subdistricts</h3>
+<p> Data retrieved from  <a href="https://www.singstat.gov.sg/publications/population/population-trends">singstat.gov.sg</a>.</p>
+<div id="buttons">
+    <a class="btn btn-blue" onClick="showMap(0)">Male Population</a>
+    <a class="btn btn-red" onClick="showMap(1)">Female Population</a>
+</div>
+<div id="map"></div>
+<script src="https://d3js.org/d3.v6.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+	
+	let tiles = new L.tileLayer('https://maps-{s}.onemap.sg/v3/Default/{z}/{x}/{y}.png', {
+		detectRetina: true,
+		maxZoom: 18,
+		minZoom: 12,
+		//Do not remove this attribution
+		attribution: '<img src="https://docs.onemap.sg/maps/images/oneMap64-01.png" style="height:20px;width:20px;">' +
+								 'New OneMap | Map data © contributors, <a href="http://SLA.gov.sg">Singapore Land Authority</a>'
+	});
+	
+	let map = new L.Map("map", {
+		center: [1.347833, 103.809357], 
+		zoom: 12,
+        maxBounds: L.latLngBounds(L.latLng(1.1, 103.5), L.latLng(1.5, 104.3))
+    	})
+    	.addLayer(tiles);
+    
+	let svg = d3.select(map.getPanes().overlayPane)
+		.append("svg")
+		.attr("width", window.innerWidth)
+		.attr("height", window.innerHeight)
+		.append("g")
+		.attr("id","svgLayer")
+		.attr("class", "leaflet-zoom-hide");
+			
+	function projectPoint(x, y) {
+		let point = map.latLngToLayerPoint(new L.LatLng(y, x));
+		this.stream.point(point.x, point.y);
+	}
+
+	let projection = d3.geoTransform({point: projectPoint});
+	let geopath = d3.geoPath().projection(projection);
+	
+	let tooltip = d3.select("#map")            
+		.append("div")     
+		.attr("class", "tooltip hidden")  
+		
+	let legend = d3.select("#map") 
+    	.append("div").attr("class", "legend").html("<b>Legend</b>")
+    	.append("svg");
+    	
+    let x = d3.scaleLinear()
+        .domain([500, 20000])
+        .range([0, 270]);
+                    
+
+	function showMap(bool) {
+	
+    	//clear all old maps
+    	legend.selectAll("*").remove();
+    	svg.selectAll("*").remove();
+	
+		Promise.all([d3.json("sgmap.json"), d3.csv("population2020.csv")]).then(data => {
+				
+				
+    		//Match zones from the 2 datasets by name and add PopMale/PopFemale value to sgmap
+            data[0].features.forEach (map => {
+                let result = data[1].filter( zone => {
+        			return zone.Subzone.toUpperCase() === map.properties.Name
+        		});
+        		if ((typeof result[0] !== "undefined") && (result[0].PopMale !== "-")) {
+            		map.properties.male = result[0].PopMale;
+            		map.properties.female = result[0].PopFemale;
+        		}
+        	});	
+			
+			//Male
+			if (bool === 0) {	
+    			
+			    let color = d3.scaleQuantize()
+                    .domain([500,20000])
+                    .range(d3.schemeBlues[9]);
+
+				svg.append("g")
+					.attr("id", "districts")
+					.selectAll("path")
+					.data(data[0].features)
+					.enter()
+					.append("path")
+					.attr("d",  d => geopath(d))
+					.attr("fill", d => {
+						if (typeof d.properties.male !== "undefined"){
+                    		return color(d.properties.male);
+                		}else{
+                    		return "#777";
+                		}
+					})
+					.classed("leaflet-interactive", true) 
+					.on("mouseover", (event, d) => {
+                        if (typeof d.properties.male !== "undefined"){
+                            tooltip.classed("hidden", false)
+                            .attr("style", "left:" + (event.pageX) + "px;top:" + (event.pageY - 120) + "px")
+                            .html("<b><u>" + d.properties.Name + "</b></u><br>" 
+                            +  d.properties.male + " Males<br>" + d.properties.female + " Females");    
+                        }					
+                        d3.select(event.currentTarget)
+							.classed("highlight", true);
+                    })
+                    .on("mouseout", (event, d) => {
+                        tooltip.classed("hidden", true);
+                        d3.select(event.currentTarget)
+						.classed("highlight", false);
+                    });
+        
+                    //creating the legend
+                    legend.selectAll("rect")
+                        .data(color.range().map(d => {
+                            d = color.invertExtent(d);
+                            if (d[0] == null) d[0] = x.domain()[0];
+                            if (d[1] == null) d[1] = x.domain()[1];
+                            //console.log(d);
+                            return d;
+                        }))
+                        .enter().append("rect")
+                        .attr("height", 10)
+                        .attr("x",(d,i) => {
+                    		return i*30;
+                    	})
+                        .attr("width",'30')
+                        .attr("fill", d => {
+                            return color(d[0]); 
+                        });
+
+                    legend.call(d3.axisBottom(x)
+                        .tickSize(15)
+                        .tickValues([2666, 4833, 7000, 9166, 11333, 13500, 15666, 17833])
+                        )
+                      .select(".domain")
+                        .remove();
+                    
+            //female
+			} else { 
+			
+				let color = d3.scaleQuantize()
+                    .domain([500,20000])
+                    .range(d3.schemeReds[9]);
+
+    			svg.append("g")
+					.attr("id", "districts")
+					.selectAll("path")
+					.data(data[0].features)
+					.enter()
+					.append("path")
+					.attr("d",  d => geopath(d))
+					.attr("fill", d => {
+						if (typeof d.properties.male !== "undefined"){
+                    		return color(d.properties.female);
+                		}else{
+                    		return "#777";
+                		}
+					})
+					.classed("leaflet-interactive", true) 
+					.on("mouseover", (event, d) => {
+                        if (typeof d.properties.female !== "undefined"){
+                            tooltip.classed("hidden", false)
+                            .attr("style", "left:" + (event.pageX) + "px;top:" + (event.pageY - 120) + "px")
+                            .html("<b><u>" + d.properties.Name + "</b></u><br>" 
+                            +  d.properties.male + " Males<br>" + d.properties.female + " Females");    
+                        }					
+                        d3.select(event.currentTarget)
+							.classed("highlight", true);
+                    })
+                    .on("mouseout", (event, d) => {
+                        tooltip.classed("hidden", true);
+                        d3.select(event.currentTarget)
+						.classed("highlight", false);
+                    });
+                    
+        
+                    //creating the legend
+                    legend.selectAll("rect")
+                        .data(color.range().map(d => {
+                            d = color.invertExtent(d);
+                            if (d[0] == null) d[0] = x.domain()[0];
+                            if (d[1] == null) d[1] = x.domain()[1];
+                            //console.log(d);
+                            return d;
+                        }))
+                        .enter().append("rect")
+                        .attr("height", 10)
+                        .attr("x",(d,i) => {
+                    		return i*30;
+                    	})
+                        .attr("width",'30')
+                        .attr("fill", d => {
+                            return color(d[0]); 
+                        });
+
+                    legend.call(d3.axisBottom(x)
+                        .tickSize(15)
+                        .tickValues([2666, 4833, 7000, 9166, 11333, 13500, 15666, 17833])
+                        )
+                      .select(".domain")
+                        .remove();
+				
+			}
+            
+			map.on('zoomend', onZoom);
+		
+			function onZoom() {
+				let bounds = geopath.bounds(data[0]),
+					topLeft = bounds[0],
+					bottomRight = bounds[1];
+
+				let svg = d3.select(map.getPanes().overlayPane).select("svg");
+							
+				svg.attr("width", bottomRight[0] - topLeft[0])
+				 .attr("height", bottomRight[1] - topLeft[1])
+				 .style("left", topLeft[0] + "px")
+				 .style("top", topLeft[1] + "px");
+					 
+				svg.select("g").attr("transform", "translate(" + -topLeft[0] + "," + -topLeft[1] + ")");
+				d3.select("g#districts").selectAll("path")
+				 .attr("d", d => geopath(d));
+			}
+			
+		});
+	}
+	
+	showMap(0);
+	
+</script>
+</body>
+</html>
